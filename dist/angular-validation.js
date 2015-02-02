@@ -153,6 +153,7 @@
              */
             this.showErrorMessage = true;
 
+
             /**
              * Check form valid, return true
              * checkValid(Form): Check the specific form(Form) valid from angular `$valid`
@@ -173,7 +174,6 @@
              * @returns {promise|*}
              */
             this.validate = function(form) {
-
                 var deferred = $q.defer(),
                     idx = 0;
 
@@ -182,7 +182,9 @@
                     deferred.reject('This is not a regular Form name scope');
                     return deferred.promise;
                 }
-
+                // console.log(form.validationId);
+                // console.log(form.constructor);
+                // console.log(form);
                 if (form.validationId) { // single
                     $scope.$broadcast(form.$name + 'submit-' + form.validationId, idx++);
                 } else if (form.constructor === Array) { // multiple
@@ -295,23 +297,14 @@
                  * @param ctrl
                  * @returns {}
                  */
-                var validFunc = function(element, validMessage, validation, scope, ctrl) {
-                    var messageElem,
-                        messageToShow = validMessage || $validationProvider.getDefaultMsg(validation).success;
-
-                    if (scope.messageId)
-                        messageElem = angular.element(document.querySelector('#' + scope.messageId));
-                    else
-                        messageElem = element.next();
-
-                    if ($validationProvider.showSuccessMessage && messageToShow) {
-                        messageElem.html($validationProvider.getSuccessHTML(messageToShow));
-                        messageElem.css('display', '');
+                var validFunc = function(element, validMessage, validation, callback, ctrl) {
+                    if ($validationProvider.showSuccessMessage) {
+                        element.next().html($validationProvider.getSuccessHTML(validMessage || $validationProvider.getDefaultMsg(validation).success));
                     } else {
-                        messageElem.css('display', 'none');
+                        element.next().html('');
                     }
                     ctrl.$setValidity(ctrl.$name, true);
-                    if (scope.validCallback) scope.validCallback();
+                    if (callback) callback();
 
                     return true;
                 };
@@ -326,23 +319,14 @@
                  * @param ctrl
                  * @returns {}
                  */
-                var invalidFunc = function(element, validMessage, validation, scope, ctrl) {
-                    var messageElem,
-                        messageToShow = validMessage || $validationProvider.getDefaultMsg(validation).error;
-
-                    if (scope.messageId)
-                        messageElem = angular.element(document.querySelector('#' + scope.messageId));
-                    else
-                        messageElem = element.next();
-
-                    if ($validationProvider.showErrorMessage && messageToShow) {
-                        messageElem.html($validationProvider.getErrorHTML(messageToShow));
-                        messageElem.css('display', '');
+                var invalidFunc = function(element, validMessage, validation, callback, ctrl) {
+                    if ($validationProvider.showErrorMessage) {
+                        element.next().html($validationProvider.getErrorHTML(validMessage || $validationProvider.getDefaultMsg(validation).error));
                     } else {
-                        messageElem.css('display', 'none');
+                        element.next().html('');
                     }
                     ctrl.$setValidity(ctrl.$name, false);
-                    if (scope.inValidCallback) scope.inValidCallback();
+                    if (callback) callback();
 
                     return false;
                 };
@@ -368,6 +352,8 @@
                  */
                 var checkValidation = function(scope, element, attrs, ctrl, validation, value) {
 
+
+
                     var validators = validation.slice(0),
                         validator = validators[0].trim(),
                         leftValidation = validators.slice(1),
@@ -376,7 +362,8 @@
                         expression = $validationProvider.getExpression(validator),
                         valid = {
                             success: function() {
-                                validFunc(element, attrs[successMessage], validator, scope, ctrl);
+                                // console.log("success");
+                                validFunc(element, attrs[successMessage], validator, scope.validCallback, ctrl);
                                 if (leftValidation.length) {
                                     checkValidation(scope, element, attrs, ctrl, leftValidation, value);
                                 } else {
@@ -384,10 +371,11 @@
                                 }
                             },
                             error: function() {
-                                return invalidFunc(element, attrs[errorMessage], validator, scope, ctrl);
+                                // console.log("error");
+                                return invalidFunc(element, attrs[errorMessage], validator, scope.invalidCallback, ctrl);
                             }
                         };
-
+                    // console.log("checking " + expression);
                     if (expression === undefined) {
                         console.error('You are using undefined validator "%s"', validator);
                         if (leftValidation.length) {
@@ -397,9 +385,11 @@
                         }
                     }
                     // Check with Function
+                    // console.log(expression.constructor);
                     if (expression.constructor === Function) {
                         return $q.all([$validationProvider.getExpression(validator)(value, scope, element, attrs)])
                             .then(function(data) {
+                                // console.log(data);
                                 if (data && data.length > 0 && data[0]) {
                                     return valid.success();
                                 } else {
@@ -411,11 +401,7 @@
                     }
                     // Check with RegExp
                     else if (expression.constructor === RegExp) {
-                        // Only apply the test if the value is neither undefined or null
-                        if (value !== undefined && value !== null)
-                            return $validationProvider.getExpression(validator).test(value) ? valid.success() : valid.error();
-                        else
-                            return valid.error();
+                        return $validationProvider.getExpression(validator).test(value) ? valid.success() : valid.error();
                     } else {
                         return valid.error();
                     }
@@ -441,179 +427,211 @@
                         initialValidity: '=initialValidity',
                         validCallback: '&',
                         invalidCallback: '&',
-                        messageId: '@'
+                        req: "@req"
                     },
                     link: function(scope, element, attrs, ctrl) {
 
-                        /**
-                         * watch
-                         * @type {watch}
-                         *
-                         * Use to collect scope.$watch method
-                         *
-                         * use watch() to destroy the $watch method
-                         */
-                        var watch = function() {};
+                        
+                            scope.$watch('req', function (newval, oldval) {
+                                // console.log(element[0]);
+                                // console.log(ctrl.$name);
+                                    /**
+                                 * watch
+                                 * @type {watch}
+                                 *
+                                 * Use to collect scope.$watch method
+                                 *
+                                 * use watch() to destroy the $watch method
+                                 */
+                                var watch = function() {};
 
-                        /**
-                         * validator
-                         * @type {Array}
-                         *
-                         * Convert user input String to Array
-                         */
-                        var validation = attrs.validator.split(',');
-
-                        /**
-                         * guid use
-                         */
-                        var uid = ctrl.validationId = guid();
-
-
-                        /**
-                         * Set initial validity to undefined if no boolean value is transmitted
-                         */
-                        var initialValidity;
-                        if (typeof scope.initialValidity === 'boolean') {
-                            initialValidity = scope.initialValidity;
-                        }
-
-                        /**
-                         * Default Valid/Invalid Message
-                         */
-                        if (!scope.messageId)
-                            element.after('<span></span>');
-
-                        /**
-                         * Set custom initial validity
-                         * Usage: <input initial-validity="true" ... >
-                         */
-                        ctrl.$setValidity(ctrl.$name, initialValidity);
-
-                        /**
-                         * Reset the validation for specific form
-                         */
-                        scope.$on(ctrl.$name + 'reset-' + uid, function() {
-
-                            /**
-                             * clear scope.$watch here
-                             * when reset status
-                             * clear the $watch method to prevent
-                             * $watch again while reset the form
-                             */
-                            watch();
-
-                            isFocusElement = false;
-                            ctrl.$setViewValue('');
-                            ctrl.$setPristine();
-                            ctrl.$setValidity(ctrl.$name, undefined);
-                            ctrl.$render();
-                            if (scope.messageId)
-                                angular.element(document.querySelector('#' + scope.messageId)).html('');
-                            else
-                                element.next().html('');
-                        });
-
-                        /**
-                         * Check validator
-                         */
-
-                        (function() {
-                            /**
-                             * Click submit form, check the validity when submit
-                             */
-                            scope.$on(ctrl.$name + 'submit-' + uid, function(event, index) {
-                                var value = ctrl.$viewValue,
-                                    isValid = false;
-
-                                if (index === 0) {
-                                    isFocusElement = false;
+                                /**
+                                 * Set initial validity to false if no boolean value is transmitted
+                                 */
+                                var initialValidity = false;
+                                if (typeof scope.initialValidity === 'boolean') {
+                                    initialValidity = scope.initialValidity;
                                 }
 
-                                isValid = checkValidation(scope, element, attrs, ctrl, validation, value);
+                                /**
+                                 * Set custom initial validity
+                                 * Usage: <input initial-validity="true" ... >
+                                 */
+                                ctrl.$setValidity(ctrl.$name, initialValidity);
 
-                                if (attrs.validMethod === 'submit') {
-                                    watch(); // clear previous scope.$watch
-                                    watch = scope.$watch('model', function(value, oldValue) {
 
-                                        // don't watch when init
-                                        if (value === oldValue) {
-                                            return;
-                                        }
+                                /**
+                                 * validator
+                                 * @type {Array}
+                                 *
+                                 * Convert user input String to Array
+                                 */
+                                 var validation;
 
-                                        // scope.$watch will translate '' to undefined
-                                        // undefined/null will pass the required submit /^.+/
-                                        // cause some error in this validation
-                                        if (value === undefined || value === null) {
-                                            value = '';
+                                var req = scope.req;
+                                var v = scope.$eval(req);
+                                // console.log(req);
+                                validation = v.split(',');
+                                // console.log(ctrl.$name);
+                                // console.log('validator is: ');
+                                // console.log(validation);
+
+                                if(req[0] === 'f' && req[1] === 'a' && req[2] === 'l' &&
+                                    req[3] === 's' && req[4] === 'e' && (req[5] === '?' || req[5] === ' ')){
+                                    ctrl.$setValidity(ctrl.$name, true);
+                                }
+                                else
+                                    ctrl.$setValidity(ctrl.$name, false);
+                                // console.log(ctrl.$valid);
+
+                                /**
+                                 * guid use
+                                 */
+                                var uid = ctrl.validationId = guid();
+
+                                /**
+                                 * Valid/Invalid Message
+                                 */
+                                element.after('<span></span>');
+
+
+
+                                /**
+                                 * Reset the validation for specific form
+                                 */
+                                scope.$on(ctrl.$name + 'reset-' + uid, function() {
+
+                                    /**
+                                     * clear scope.$watch here
+                                     * when reset status
+                                     * clear the $watch method to prevent
+                                     * $watch again while reset the form
+                                     */
+                                    watch();
+
+                                    isFocusElement = false;
+                                    ctrl.$setViewValue('');
+                                    ctrl.$setPristine();
+                                    ctrl.$setValidity(ctrl.$name, false);
+                                    ctrl.$render();
+                                    element.next().html('');
+                                });
+
+
+
+                                /**
+                                 * Check validator
+                                 */
+
+                                (function() {
+                                    /**
+                                     * Click submit form, check the validity when submit
+                                     */
+                                    scope.$on(ctrl.$name + 'submit-' + uid, function(event, index) {
+                                        // console.log("Submit broadcast caught");
+                                        // console.log(element);
+                                        var value = element[0].value,
+                                            isValid = false;
+
+                                        if (index === 0) {
+                                            isFocusElement = false;
                                         }
 
                                         isValid = checkValidation(scope, element, attrs, ctrl, validation, value);
+                                        
+                                        if (attrs.validMethod === 'submit') {
+                                            watch(); // clear previous scope.$watch
+                                            watch = scope.$watch('model', function(value, oldValue) {
+                                                // don't watch when init
+                                                if (value === oldValue) {
+                                                    return;
+                                                }
+
+                                                // scope.$watch will translate '' to undefined
+                                                // undefined/null will pass the required submit /^.+/
+                                                // cause some error in this validation
+                                                if (value === undefined || value === null) {
+                                                    value = '';
+                                                }
+
+                                                isValid = checkValidation(scope, element, attrs, ctrl, validation, value);
+                                            });
+
+                                        }
+
+                                        // Focus first input element when submit error #11
+                                        isValid.then(function (arg) {
+                                            if (!isFocusElement && !arg) {
+                                                isFocusElement = true;
+                                                element[0].focus();
+                                            }
+                                        });
+                                        
                                     });
 
-                                }
+                                    /**
+                                     * Validate blur method
+                                     */
+                                    if (attrs.validMethod === 'blur') {
+                                        element.bind('blur', function() {
+                                            var value = element[0].value;
+                                            scope.$apply(function() {
+                                                checkValidation(scope, element, attrs, ctrl, validation, value);
+                                            });
+                                        });
 
-                                // Focus first input element when submit error #11
-                                if (!isFocusElement && !isValid) {
-                                    isFocusElement = true;
-                                    element[0].focus();
-                                }
-                            });
+                                        return;
+                                    }
 
-                            /**
-                             * Validate blur method
-                             */
-                            if (attrs.validMethod === 'blur') {
-                                element.bind('blur', function() {
-                                    var value = ctrl.$viewValue;
-                                    scope.$apply(function() {
+                                    /**
+                                     * Validate submit & submit-only method
+                                     */
+                                    if (attrs.validMethod === 'submit' || attrs.validMethod === 'submit-only') {
+                                        return;
+                                    }
+
+                                    /**
+                                     * Validate watch method
+                                     * This is the default method
+                                     */
+                                    scope.$watch('model', function(value) {
+                                        /**
+                                         * dirty, pristine, viewValue control here
+                                         */
+  
+                                        if (ctrl.$pristine && ctrl.$viewValue) {
+                                            // has value when initial
+                                            ctrl.$setViewValue(ctrl.$viewValue);
+                                        } else if (ctrl.$pristine) {
+                                            // Don't validate form when the input is clean(pristine)
+                                            element.next().html('');
+                                            return;
+                                        }
                                         checkValidation(scope, element, attrs, ctrl, validation, value);
                                     });
-                                });
 
-                                return;
-                            }
+                                })();
 
-                            /**
-                             * Validate submit & submit-only method
-                             */
-                            if (attrs.validMethod === 'submit' || attrs.validMethod === 'submit-only') {
-                                return;
-                            }
 
-                            /**
-                             * Validate watch method
-                             * This is the default method
-                             */
-                            scope.$watch('model', function(value) {
-                                /**
-                                 * dirty, pristine, viewValue control here
-                                 */
-                                if (ctrl.$pristine && ctrl.$viewValue) {
-                                    // has value when initial
-                                    ctrl.$setViewValue(ctrl.$viewValue);
-                                } else if (ctrl.$pristine) {
-                                    // Don't validate form when the input is clean(pristine)
-                                    if (scope.messageId)
-                                        angular.element(document.querySelector('#' + scope.messageId)).html('');
-                                    else
-                                        element.next().html('');
-                                    return;
-                                }
-                                checkValidation(scope, element, attrs, ctrl, validation, value);
-                            });
 
-                        })();
 
+
+
+
+
+                        });
+                        
+                        
+
+
+
+                        
                         $timeout(function() {
                             /**
                              * Don't showup the validation Message
                              */
                             attrs.$observe('noValidationMessage', function(value) {
-                                var el;
-                                if (scope.messageId)
-                                    el = angular.element(document.querySelector('#' + scope.messageId));
-                                else
-                                    el = element.next();
+                                var el = element.next();
                                 if (value == 'true' || value === true) {
                                     el.css('display', 'none');
                                 } else if (value == 'false' || value === false) {
@@ -639,7 +657,6 @@
                 require: '?ngClick',
                 link: function postLink(scope, element, attrs) {
                     var form = $parse(attrs.validationSubmit)(scope);
-
                     $timeout(function() {
                         // Disable ng-click event propagation
                         element.off('click');
@@ -649,11 +666,152 @@
                             $validationProvider.validate(form)
                                 .success(function() {
                                     $parse(attrs.ngClick)(scope);
+                                })
+                                .error(function () {
+                                    
                                 });
                         });
                     });
 
                 }
+            };
+        }
+    ])
+
+    .directive('validationSubmit2', ['$injector',
+        function($injector) {
+
+            var $validationProvider = $injector.get('$validation'),
+                $timeout = $injector.get('$timeout'),
+                $parse = $injector.get('$parse'),
+                $q = $injector.get('$q');
+
+            return {
+                priority: 1, // execute before ng-click (0)
+                require: '?ngClick',
+                link: function postLink(scope, element, attrs) {
+                    // console.log(attrs.validationSubmit2);
+                        
+
+                        $timeout(function() {
+                            // Disable ng-click event propagation
+                            element.off('click');
+                            element.on('click', function(e) {
+                                var x = $parse(attrs.validationSubmit2)(scope);
+                                x = Object.keys(x);
+                                // console.log(x);
+                                var count = 0;
+                                var defer = $q.defer();
+                                var promises = [];
+
+                                angular.forEach(x, function(form_name){
+                                    // console.log(form_name);
+                                    var form = $parse(attrs.validationSubmit2 + '.' + form_name)(scope);
+                                    if(!angular.isUndefined(form)){
+                                        e.preventDefault();
+                                        
+                                        // console.log(form);
+                                        // e.preventDefault();
+                                        var inner_form = $parse(attrs.validationSubmit2 + '.' + form_name + '.StepInnerForm' )(scope);
+                                        // console.log(inner_form);
+                                        promises.push($validationProvider.validate(form));
+                                        if(!angular.isUndefined(inner_form)){
+                                            
+                                            promises.push($validationProvider.validate(inner_form));
+                                        }
+                                    }
+                                        
+                                });
+                                // $parse(attrs.ngClick)(scope);
+                                var pr = $q.all(promises);
+                                pr.then(function (arg) {
+                                    console.log("promises completeed");
+                                    defer.resolve(arg);
+                                }).then(function () {
+                                    $parse(attrs.ngClick)(scope);
+                                });
+                                pr.catch(function () {
+                                    
+                                    console.log("promises notcompleteed");
+                                   // $parse(attrs.ngClick)(scope);
+                                });
+
+                                
+                            });
+                        });
+                    }
+
+            };
+        }
+    ])
+    .directive('validationSubmit3', ['$injector',
+        function($injector) {
+
+            var $validationProvider = $injector.get('$validation'),
+                $timeout = $injector.get('$timeout'),
+                $parse = $injector.get('$parse'),
+                $q = $injector.get('$q');
+
+            return {
+                priority: 1, // execute before ng-click (0)
+                require: '?ngClick',
+                link: function postLink(scope, element, attrs) {
+                    console.log(attrs.validationSubmit3);
+                        
+
+                        $timeout(function() {
+                            // Disable ng-click event propagation
+                            element.off('click');
+                            element.on('click', function(e) {
+                                var x = $parse(attrs.validationSubmit3)(scope);
+                                console.log(attrs.validationSubmit3);
+                                console.log(x);
+                                x = Object.keys(x);
+                                console.log(x);
+                                var count = 0;
+                                var defer = $q.defer();
+                                var promises = [];
+
+                                angular.forEach(x, function(form_name){
+                                    console.log(form_name);
+                                    var form = $parse(attrs.validationSubmit3 + '.' + form_name)(scope);
+                                    if(!angular.isUndefined(form)){
+                                        e.preventDefault();
+                                        
+                                        console.log(form);
+                                        // e.preventDefault();
+                                        var inner_form = $parse(attrs.validationSubmit3 + '.' + form_name + '.StepInnerForm' )(scope);
+                                        console.log(inner_form);
+                                        promises.push($validationProvider.validate(form));
+                                        if(!angular.isUndefined(inner_form)){
+                                            
+                                            promises.push($validationProvider.validate(inner_form));
+                                        }
+                                    }
+                                        
+                                });
+                                // $parse(attrs.ngClick)(scope);
+                                var pr = $q.all(promises);
+                                pr.then(function (arg) {
+                                    console.log("promises completeed");
+                                    defer.resolve(arg);
+                                }).then(function () {
+                                    console.log(attrs.ngClick);
+                                    console.log(scope);
+                                    console.log($parse(attrs.ngClick)(scope));
+                                });
+                                pr.catch(function () {
+                                    
+                                    console.log(scope);
+                                    console.log("promises notcompleteed");
+                                   // $parse(attrs.ngClick)(scope);
+                                });
+
+                                
+                            });
+                        });
+                    }
+
             };
         }
     ])
@@ -682,3 +840,37 @@
     ]);
 
 }).call(this);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// MY CUSTOM THINGS HERE
+
+
+
+
